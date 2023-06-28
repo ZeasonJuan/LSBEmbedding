@@ -1,16 +1,32 @@
 import gzip
+import hashlib
 import math
+import random
 import struct
 import sys
 import numpy as np
-
+MY_FINAL_KEY = "阮在胜是阮在胜是阮在胜是阮在胜是阮在胜是阮在胜是阮在胜是阮在胜是阮在胜是阮在胜是阮在胜"
+MY_FINAL_KEY = MY_FINAL_KEY.encode('utf-32')
 #python 的 string会比内容多那么几十byte，有大问题
 #判断出字符串中的最大字符类型1byte 2byte 4byte 从而计算字符串长度
 
 #6/20更新，计算长度后与压缩进行对比，谁小用谁。返回值修改为1.是否使用压缩2.string的encode方式3.字节流变成的数组
 #若使用压缩，返回字节流变成的数字流（0-255）（可以直接用写完的那个方法转成list）
 #若不适用压缩，返回大数字流（根据utf32/16变化）（重新写一个方法，接收encode方法参数）
-dict_encode_method_and_its_bit_amount = {"utf-32": 32, "utf-16": 16}
+dict_encode_method_and_its_bit_amount = {"utf-32": 32, "utf-16": 16, 'ascii': 8}
+def encrypt(array, key):
+    seed = int.from_bytes(hashlib.sha256(key).digest(), 'big')
+    random_machine = np.random.default_rng(seed)
+    roll = random_machine.permutation(len(array))
+    return array[roll]
+
+def decrypt(roll_array, key):
+    seed = int.from_bytes(hashlib.sha256(key).digest(), 'big')
+    random_machine = np.random.default_rng(seed)
+    roll = random_machine.permutation(len(roll_array))
+    empty_array = np.empty_like(roll_array)
+    empty_array[roll] = roll_array
+    return empty_array
 def size_of_string(a_str):
     if isinstance(a_str, str):
         #找出最大的字符
@@ -33,6 +49,7 @@ def size_of_string(a_str):
             zip_byte = gzip.compress(a_str.encode('utf-16'))
 
             zip_size = sys.getsizeof(zip_byte)
+            print(unzip_size, zip_size)
             if zip_size < unzip_size:
                 return True, 'utf-16', [i for i in zip_byte]
             else:
@@ -49,8 +66,8 @@ def size_of_string(a_str):
     else:
         return "Not a string!"
 def list_to_number(a_list):
-    if len(a_list) != 8:
-        return "not a byte"
+    if len(a_list) != 8 and len(a_list) != 16 and len(a_list) != 32:
+        return "not a character"
     a_list.reverse()
     the_sum = 0
     for i in range(len(a_list)):
@@ -86,23 +103,105 @@ def transform_utf_to_list(number, bit_number):
     final_list.reverse()
     return final_list
 
-#把信息的0-1数组补全，让它的长度和LSB嵌入的最大
-def get_lsb(linear_list, width, height):
-    #linear_list += [0] * (width * height - len(linear_list))
-    #这里可以加个加密，不太想做了嘿嘿
-    lsb_new = []
 
-    for i in range(height):
-        this_line = []
-        for j in range(width):
-            element = linear_list[i * width + j] if i * width + j < len(linear_list) else 0
-            this_line.append(element)
-        lsb_new.append(this_line)
+#把信息的0-1数组补全，让它的长度和LSB嵌入的最大
+def get_lsb(linear_list, width, height, bibi_count):
+    #linear_list += [0] * (width * height - len(linear_list))
+    #这里可以加个加密
+    lsb_new = []
+    long_linear = linear_list + [0] * (height * width - len(linear_list)) if bibi_count == 8 else linear_list + [0] * (3 * height * width - len(linear_list))
+    long_linear = encrypt(np.array(long_linear), MY_FINAL_KEY).tolist()
+    if bibi_count == 8:
+        for i in range(height):
+            this_line = []
+            for j in range(width):
+                element = long_linear[i * width + j] #if i * width + j < len(linear_list) else 0
+                this_line.append(element)
+            lsb_new.append(this_line)
+    else:
+        for z in range(3):
+            this_page = []
+            for i in range(height):
+                this_line = []
+                for j in range(width):
+                    element = long_linear[z * (width * height) + i * width + j] #if z * (width * height) + i * width + j < len(linear_list) else 0
+                    this_line.append(element)
+                this_page.append(this_line)
+            lsb_new.append(this_page)
     return lsb_new
 
+def come_on(filepath):
+    with open(filepath, 'rb') as f:
+        binary_header = f.read(14)
+        binary_message = f.read(40)
+        header_duple = struct.unpack('<2sI2HI', binary_header)
+        message_duple = struct.unpack('3I2H6I', binary_message)
+        print(header_duple, message_duple)
+        encode_method = ''
+        if header_duple[2] == header_duple[3] == 0:
+            return "Not Encrypt!"
+        elif header_duple[2] == 0:
+            encode_method = 'ascii'
+        elif header_duple[3] == 0:
+            encode_method = 'utf-16'
+        else:
+            encode_method = 'utf-32'
+
+        bibi_count = message_duple[4]
+        width = message_duple[1]
+        height = message_duple[2]
+        is_zip = True if message_duple[3] == 1 else False
+        f.seek(header_duple[-1])
+
+        bytes_list_all = []
+        for i in range(height):
+            this_line_bytes = []
+            for j in range(width):
+                if bibi_count == 8:
+                    this_pixel = int.from_bytes(f.read(1)[::-1], 'big')
+                    this_line_bytes.append(transform_number_to_list(this_pixel))
+                else:
+                    this_pixel = []
+                    this_pixel_blue = int.from_bytes(f.read(1)[::-1], 'big')
+                    this_pixel_green = int.from_bytes(f.read(1)[::-1], 'big')
+                    this_pixel_red = int.from_bytes(f.read(1)[::-1], 'big')
+                    this_pixel.append(transform_number_to_list(this_pixel_blue))
+                    this_pixel.append(transform_number_to_list(this_pixel_green))
+                    this_pixel.append(transform_number_to_list(this_pixel_red))
+
+                    this_line_bytes.append(this_pixel)
+            bytes_list_all.append(this_line_bytes)
+        zero_one_len = struct.unpack('<I', f.read(4))[0]
+
+        # 转换成这个比较习惯
+        bytes_list_all = np.array(bytes_list_all)
+        lsb = bytes_list_all[:, :, -1] if bibi_count == 8 else bytes_list_all[:, :, :, -1].transpose(2, 0, 1)
+        print(lsb.shape)
+        zero_one_list = decrypt(lsb.flatten().tolist(), MY_FINAL_KEY).tolist()[: zero_one_len]
+
+        last_number_list = []
+        print(is_zip, encode_method)
+        if is_zip:
+            for i in range(math.floor(len(zero_one_list) / 8)):
+                last_number_list.append(list_to_number(zero_one_list[i * 8: i * 8 + 8]))
+            final_msg = gzip.decompress(bytes(last_number_list)).decode(encode_method)
+            print(final_msg)
 
 
-def if_can_be_process(filepath, embedding_string):
+        if not is_zip:
+            chr_len = dict_encode_method_and_its_bit_amount[encode_method]
+            for i in range(math.floor(len(zero_one_list) / chr_len)):
+                last_number_list.append(list_to_number(zero_one_list[i * chr_len: i * chr_len + chr_len]))
+
+            final_msg = ''
+            print(last_number_list[:50])
+            for i in range(len(last_number_list)):
+                final_msg += chr(last_number_list[i])
+            print(final_msg)
+
+
+
+def if_can_be_process(filepath, embedding_string, is_noise):
     is_zip, encode_method, number_array = size_of_string(embedding_string)
     print(is_zip, number_array, encode_method)
     zero_one_list = []
@@ -114,14 +213,15 @@ def if_can_be_process(filepath, embedding_string):
 
     #推平，得到一个东西
     zero_one_list = sum(zero_one_list, [])
+    print(zero_one_list[:1000])
 
     with open(filepath, 'rb') as f:
         is_bmp = f.read(2) == b'BM'
         if not is_bmp:
             return "Not a bmp!"
         bmp_size = int.from_bytes(f.read(4)[::-1], 'big')
-        bf_reserve1_is0 = int.from_bytes(f.read(2)[::-1], 'big') == 0
-        bf_reserve2_is0 = int.from_bytes(f.read(2)[::-1], 'big') == 0
+        bf_reserve1_is0 = int.from_bytes(f.read(2)[::-1], 'big')
+        bf_reserve2_is0 = int.from_bytes(f.read(2)[::-1], 'big')
         off_bits = int.from_bytes(f.read(4)[::-1], 'big')
 
 
@@ -133,22 +233,25 @@ def if_can_be_process(filepath, embedding_string):
             return "Size too large!"
 
         if_bi_planes_is_1 = int.from_bytes(f.read(2)[::-1], 'big') == 1
-        if not bf_reserve2_is0 or not bf_reserve1_is0 or not if_bi_planes_is_1:
+        if not bf_reserve2_is0 == 0 or not bf_reserve1_is0 == 0 or not if_bi_planes_is_1:
             return "Something wrong with check..."
         bibi_count = int.from_bytes(f.read(2)[::-1], 'big')
         bi_compression = int.from_bytes(f.read(4)[::-1], 'big')
 
-        no_use = f.read(16)
+        bi_size_image = int.from_bytes(f.read(4)[::-1], 'big')
+        bi_X_per = int.from_bytes(f.read(4)[::-1], 'big')
+        bi_Y_per = int.from_bytes(f.read(4)[::-1], 'big')
+        bi_color_used = int.from_bytes(f.read(4)[::-1], 'big')
 
         bi_coloer_important = int.from_bytes(f.read(4)[::-1], 'big')
 
 
 
         #如果是灰度图
-        if bibi_count == 8:
+        if bibi_count == 8 or bibi_count == 24:
 
             #判断嵌入超了吗，因为是灰度图所以不用乘三
-            most_long_embedding_bytes = height * width#三色图还得乘三
+            most_long_embedding_bytes = height * width if bibi_count == 8 else height * width * 3#三色图还得乘三
             if most_long_embedding_bytes < len(zero_one_list):
                 return "Message Too large!"
             # print("这是做压缩前的嵌入信息大小", embedding_size)
@@ -162,50 +265,112 @@ def if_can_be_process(filepath, embedding_string):
 
             # 调色盘
             color_plate = []
-            for i in range(256):
-                one_in_color_plate = []
-                rgb_blue = int.from_bytes(f.read(1)[::-1], 'big')
-                rgb_green = int.from_bytes(f.read(1)[::-1], 'big')
-                rgb_red = int.from_bytes(f.read(1)[::-1], 'big')
-                one_in_color_plate.append(rgb_blue)
-                one_in_color_plate.append(rgb_green)
-                one_in_color_plate.append(rgb_red)
+            if bibi_count == 8:
+                for i in range(256):
+                    one_in_color_plate = []
+                    rgb_blue = int.from_bytes(f.read(1)[::-1], 'big')
+                    rgb_green = int.from_bytes(f.read(1)[::-1], 'big')
+                    rgb_red = int.from_bytes(f.read(1)[::-1], 'big')
+                    one_in_color_plate.append(rgb_blue)
+                    one_in_color_plate.append(rgb_green)
+                    one_in_color_plate.append(rgb_red)
 
-                color_plate.append(one_in_color_plate)
-                must_be_zero = int.from_bytes(f.read(1)[::-1], 'big')
-                if must_be_zero != 0:
-                    return "Color plate error..."
+                    color_plate.append(one_in_color_plate)
+                    must_be_zero = int.from_bytes(f.read(1)[::-1], 'big')
+                    if must_be_zero != 0:
+                        return "Color plate error..."
 
 
 
             f.seek(off_bits)
             # 将图片读入
+
             bytes_list_all = []
             for i in range(height):
                 this_line_bytes = []
                 for j in range(width):
-                    this_pixel = int.from_bytes(f.read(1)[::-1], 'big')
-                    this_line_bytes.append(transform_number_to_list(this_pixel))
+                    if bibi_count == 8:
+                        this_pixel = int.from_bytes(f.read(1)[::-1], 'big')
+                        this_line_bytes.append(transform_number_to_list(this_pixel))
+                    else:
+                        this_pixel = []
+                        this_pixel_blue = int.from_bytes(f.read(1)[::-1], 'big')
+                        this_pixel_green = int.from_bytes(f.read(1)[::-1], 'big')
+                        this_pixel_red = int.from_bytes(f.read(1)[::-1], 'big')
+                        this_pixel.append(transform_number_to_list(this_pixel_blue))
+                        this_pixel.append(transform_number_to_list(this_pixel_green))
+                        this_pixel.append(transform_number_to_list(this_pixel_red))
+
+                        this_line_bytes.append(this_pixel)
                 bytes_list_all.append(this_line_bytes)
 
             #转换成这个比较习惯
             bytes_list_all = np.array(bytes_list_all)
+            print(bytes_list_all.shape)
+            new_lsb = np.array(get_lsb(zero_one_list, width=width, height=height, bibi_count=bibi_count))
+            print(new_lsb.shape)
 
-            LSB = bytes_list_all[:, :, -1]
-            new_lsb = np.array(get_lsb(zero_one_list, width=width, height=height))
-            bytes_list_all[:, :, -1] = new_lsb
+            if bibi_count == 8:
+                bytes_list_all[:, :, -1] = new_lsb
+                if is_noise:
+                    bytes_list_all[:, :, -np.random.randint(2, 5)] = np.random.randint(0, 2, (height, width))
+            else:
+                for i in range(3):
+                    bytes_list_all[:, :, i, -1] = new_lsb[i, :, :]
+                    if is_noise:
+                        bytes_list_all[:, :, i, -np.random.randint(2, 5)] = np.random.randint(0, 2, (height, width))
 
 
             #得到最后的bitmap
             result = bytes_list_all.tolist()
-            for i in range(height):
-                for j in range(width):
-                    result[i][j] = list_to_number(result[i][j])
+            if bibi_count == 8:
+                for i in range(height):
+                    for j in range(width):
+                        result[i][j] = list_to_number(result[i][j])
+            else:
+                for i in range(height):
+                    for j in range(width):
+                        for k in range(3):
+                            result[i][j][k] = list_to_number(result[i][j][k])
+
 
             #开始写
             with open('output.bmp', 'wb') as fw:
-                fw.write(struct.pack('<2sI2I', 'BM', bmp_size))
+                #如果两个都是0说明是没有替换的
+                if encode_method == "ascii":
+                    fw.write(struct.pack('<2sI2HI', b'BM', bmp_size, 0, 1, off_bits))
+                elif encode_method == "utf-16":
+                    fw.write(struct.pack('<2sI2HI', b'BM', bmp_size, 1, 0, off_bits))
+                else:
+                    fw.write(struct.pack('<2sI2HI', b'BM', bmp_size, 1, 1, off_bits))
 
-        print(width, height, bibi_count, off_bits, must_be_zero)
+                #这个判断是否压缩
+                if is_zip:
+                    fw.write(struct.pack('<3I2H6I', this_structure_size, width, height, 1, bibi_count, bi_compression, bi_size_image,
+                                     bi_X_per, bi_Y_per, bi_color_used, bi_coloer_important))
+                else:
+                    fw.write(struct.pack('<3I2H6I', this_structure_size, width, height, 0, bibi_count, bi_compression,
+                                         bi_size_image,
+                                         bi_X_per, bi_Y_per, bi_color_used, bi_coloer_important))
+                if bibi_count == 8:
+                    for i in range(256):
+                        fw.write(struct.pack('<4B', color_plate[i][0], color_plate[i][1],
+                                             color_plate[i][2], 0))
+                    for i in range(height):
+                        for j in range(width):
+                            fw.write(struct.pack('<B', result[i][j]))
+                else:
+                    for i in range(height):
+                        for j in range(width):
+                            for k in range(3):
+                                fw.write(struct.pack('<B', result[i][j][k]))
+                fw.write(struct.pack('<I', len(zero_one_list)))
 
-if_can_be_process("../data/可供选用的图片/可供选用的图片/256灰度/test2.bmp", '😀')
+
+
+        #print(width, height, bibi_count, off_bits, must_be_zero)
+
+# if_can_be_process("../data/可供选用的图片/可供选用的图片/24位真彩图/test1.bmp", '仍然倚在失眠夜，望天边星宿。仍然听见小提琴，如泣似诉再挑逗。为何只剩一弯月，留在'
+#                                                                              '我的天空。这晚以后，音sssssssssssssssssssssssssssssssss讯隔绝。😀', True)
+
+come_on('output.bmp')

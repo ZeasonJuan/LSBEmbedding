@@ -57,4 +57,4 @@
 #     for img_url in image_urls:
 #         print(img_url)
 a = [3, 5, 7, 2]
-print(''.join(a))
+print([0] * 6)
