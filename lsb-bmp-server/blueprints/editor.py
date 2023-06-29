@@ -202,7 +202,7 @@ def come_on(filepath):
             for i in range(math.floor(len(zero_one_list) / 8)):
                 last_number_list.append(list_to_number(zero_one_list[i * 8: i * 8 + 8]))
             final_msg = gzip.decompress(bytes(last_number_list)).decode(encode_method)
-            print(final_msg)
+            return final_msg
 
 
         if not is_zip:
@@ -214,7 +214,7 @@ def come_on(filepath):
             print(last_number_list[:50])
             for i in range(len(last_number_list)):
                 final_msg += chr(last_number_list[i])
-            print(final_msg)
+            return final_msg
 
 
 
@@ -353,7 +353,7 @@ def if_can_be_process(filepath, embedding_string, is_noise):
 
             #开始写
             final_filename = 'output_{}.bmp'.format(int(time.time()))
-            with open(final_filename, 'wb') as fw:
+            with open("uploads/" + final_filename, 'wb') as fw:
                 #如果两个都是0说明是没有替换的
                 if encode_method == "ascii":
                     fw.write(struct.pack('<2sI2HI', b'BM', bmp_size, 0, 1, off_bits))
@@ -396,9 +396,9 @@ def submit_article():
     data = request.json
     filename = data['filename']   # 上传的文件名 用于读取文件 也是需要嵌入的图片
     info = data['info']         # 嵌入的信息
-
+    filepath = 'uploads/' + filename
     # TODO ... Lsb的处理
-    filename = if_can_be_process(filename, info, True)
+    filename = if_can_be_process(filepath, info, True)
     # TODO 接口只返回最后处理的图片url 只需要给出你最后处理完的filename是什么就行
     filename = filename
 
