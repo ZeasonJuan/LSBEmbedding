@@ -135,6 +135,18 @@ def get_lsb(linear_list, width, height, bibi_count):
             lsb_new.append(this_page)
     return lsb_new
 
+def get_max(filepath):
+    with open(filepath, 'rb') as f:
+        binary_header = f.read(14)
+        binary_message = f.read(40)
+        header_duple = struct.unpack('<2sI2HI', binary_header)
+        message_duple = struct.unpack('3I2H6I', binary_message)
+        bibicount = message_duple[4]
+        width = message_duple[1]
+        height = message_duple[2]
+
+        max_page_bits = width * height if bibicount == 8 else width * height * 3
+        return max_page_bits
 def come_on(filepath):
     with open(filepath, 'rb') as f:
         binary_header = f.read(14)
@@ -414,14 +426,15 @@ def upload_file():
 
     if not os.path.exists(UPLOAD_FOLDER):
         os.makedirs(UPLOAD_FOLDER)
-
-    file.save(os.path.join(UPLOAD_FOLDER, filename))
-
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
+    file.save(filepath)
+    print(type)
     if type == 'embed':  # TODO 如果是嵌入图片 只处理一下可嵌入的信息长度就可以
-
+        max_bits = get_max(filepath)
+        max_lsb_length = "{}个字符 for ASCII 字符串 \n{}个字符 for utf-16编码字符串（汉字）\n{}个字符 for utf-32编码字符串（稀有字符，如emoji）\n总共{}位".format(math.floor(max_bits / 8), math.floor(max_bits / 16), math.floor(max_bits / 32), max_bits)
         # TODO 这里处理一下lsb的长度限制 返回一个字节数或者怎么样的
         # TODO 因为前端不做判断 这里就写个str就行了
-        max_lsb_length = "20 字节"
+
         # TODO ... 处理lsb长度的方法
 
         return {
@@ -435,10 +448,10 @@ def upload_file():
         }
 
     else:  # TODO 如果是解密图片
-
+        info = come_on(filepath)
         # TODO ... 处理lsb的解密
         # TODO 这里的结果就写个str就行了
-        info = "这是嵌入的信息"
+
 
         return {
             "code": 0,
