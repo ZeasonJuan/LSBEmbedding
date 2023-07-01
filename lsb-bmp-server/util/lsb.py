@@ -59,7 +59,7 @@ def size_of_string(a_str):
             zip_byte = gzip.compress(a_str.encode('utf-16'))
 
             zip_size = sys.getsizeof(zip_byte)
-            print(unzip_size, zip_size)
+            # print(unzip_size, zip_size)
             if zip_size < unzip_size:
                 return True, 'utf-16', [i for i in zip_byte]
             else:
@@ -118,13 +118,14 @@ def transform_utf_to_list(number, bit_number):
 
 
 # 把信息的0-1数组补全，让它的长度和LSB嵌入的最大
-def get_lsb(linear_list, width, height, bibi_count):
+def get_lsb(linear_list, width, height, bibi_count, need_encrypt):
     # linear_list += [0] * (width * height - len(linear_list))
     # 这里可以加个加密
     lsb_new = []
     long_linear = linear_list + [0] * (height * width - len(linear_list)) if bibi_count == 8 else linear_list + [0] * (
                 3 * height * width - len(linear_list))
-    long_linear = encrypt(np.array(long_linear), MY_FINAL_KEY).tolist()
+    if need_encrypt:
+        long_linear = encrypt(np.array(long_linear), MY_FINAL_KEY).tolist()
     if bibi_count == 8:
         for i in range(height):
             this_line = []
@@ -159,7 +160,7 @@ def get_max(filepath):
         return max_page_bits
 
 
-def come_on(filepath):
+def come_on(filepath, need_encrypt):
     with open(filepath, 'rb') as f:
         binary_header = f.read(14)
         binary_message = f.read(40)
@@ -205,11 +206,14 @@ def come_on(filepath):
         # 转换成这个比较习惯
         bytes_list_all = np.array(bytes_list_all)
         lsb = bytes_list_all[:, :, -1] if bibi_count == 8 else bytes_list_all[:, :, :, -1].transpose(2, 0, 1)
-        print(lsb.shape)
-        zero_one_list = decrypt(lsb.flatten().tolist(), MY_FINAL_KEY).tolist()[: zero_one_len]
+        # print(lsb.shape)
+        if need_encrypt:
+            zero_one_list = decrypt(lsb.flatten().tolist(), MY_FINAL_KEY).tolist()[: zero_one_len]
+        else:
+            zero_one_list = lsb.flatten().tolist()[: zero_one_len]
 
         last_number_list = []
-        print(is_zip, encode_method)
+        # print(is_zip, encode_method)
         if is_zip:
             for i in range(math.floor(len(zero_one_list) / 8)):
                 last_number_list.append(list_to_number(zero_one_list[i * 8: i * 8 + 8]))
@@ -222,13 +226,13 @@ def come_on(filepath):
                 last_number_list.append(list_to_number(zero_one_list[i * chr_len: i * chr_len + chr_len]))
 
             final_msg = ''
-            print(last_number_list[:50])
+            # print(last_number_list[:50])
             for i in range(len(last_number_list)):
                 final_msg += chr(last_number_list[i])
             return 0, final_msg
 
 
-def if_can_be_process(filepath, embedding_string, is_noise, raw_filename):
+def if_can_be_process(filepath, embedding_string, is_noise, raw_filename, need_encrypt):
     is_zip, encode_method, number_array = size_of_string(embedding_string)
     # print(is_zip, number_array, encode_method)
     zero_one_list = []
@@ -329,7 +333,8 @@ def if_can_be_process(filepath, embedding_string, is_noise, raw_filename):
             # 转换成这个比较习惯
             bytes_list_all = np.array(bytes_list_all)
             # print(bytes_list_all.shape)
-            new_lsb = np.array(get_lsb(zero_one_list, width=width, height=height, bibi_count=bibi_count))
+            new_lsb = np.array(get_lsb(zero_one_list, width=width, height=height, bibi_count=bibi_count,
+                                       need_encrypt=need_encrypt))
             # print(new_lsb.shape)
 
             if bibi_count == 8:

@@ -13,6 +13,9 @@ now_dir = os.path.realpath(__file__)
 uploads_dir = os.path.dirname(os.path.dirname(now_dir))
 UPLOAD_FOLDER = os.path.join(uploads_dir, 'uploads')
 
+IS_NOISE = False
+NEED_ENCRYPT = False
+
 
 def test_crop_resilience(image_path, direction, cut_pixel_count, step=1):
     image = Image.open(image_path)
@@ -62,14 +65,13 @@ def crop_image(image_path, cropped_image_path, start_x, start_y, width, height):
 
 
 def try_to_extract_message(cropped_image_path):
-    # Use your existing function to extract the message
     try:
-        code, message = come_on(cropped_image_path)
+        code, message = come_on(cropped_image_path, NEED_ENCRYPT)
         if code == 0:
             print(f"Message extracted from {cropped_image_path}: {message}")
         else:
-            # 删除不加密的图片
-            os.remove(cropped_image_path)
+            # 删除无法提取信息的图片
+            # os.remove(cropped_image_path)
             pass
     except Exception as e:
         print(f"Failed to extract message from {cropped_image_path}: {e}")
@@ -108,9 +110,8 @@ def random_string(length, encode_mode):
 
 
 def patch_encode_test_list():
-    raw_folder = "F:\\convert2bmp"
+    raw_folder = "F:\\convert2bmp\\raw"
     encode_modes = ['ascii', 'utf-16', 'utf-32']
-    is_noise = True
     records = []
 
     file_list = []
@@ -152,8 +153,8 @@ def patch_encode_test_list():
                     length = 11
                 embedding_string = random_string(length, encode_mode)
                 print(f"Now processing: File list #{idx + 1} Encoding mode: {encode_mode}, File index: {length_idx + 1}")
-                status, final_filename = if_can_be_process(filepath, embedding_string, is_noise,
-                                                           os.path.basename(filepath))
+                status, final_filename = if_can_be_process(filepath, embedding_string, IS_NOISE,
+                                                           os.path.basename(filepath), NEED_ENCRYPT)
                 records.append({
                     "初始文件名": os.path.basename(filepath),
                     "最终文件名": final_filename,
@@ -195,7 +196,27 @@ def crop_to_patch_size():
             count += 1
 
 
-if __name__ == '__main__':
-    patch_test_crop_resilience()
-    pass
+class RandomEngine:
+    def __init__(self, seed):
+        self.seed = seed
+        self.m = 2**32
+        self.a = 48271
+        self.c = 0
 
+    def next(self):
+        self.seed = (self.a * self.seed + self.c) % self.m
+        return self.seed
+
+
+if __name__ == '__main__':
+
+    # engine = RandomEngine(seed=1)
+    # print(engine.next())
+    # print(engine.next())
+    # print(engine.next())
+    # patch_encode_test_list()
+    # patch_test_crop_resilience()
+    filename = "（pid=5435590）夏_cropped_at_500_output_2023-07-01-21-19-24_after_jpeg.bmp"
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
+    try_to_extract_message(filepath)
+    pass

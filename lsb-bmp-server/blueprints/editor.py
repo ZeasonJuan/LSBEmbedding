@@ -17,7 +17,7 @@ def submit_article():
     info = data['info']  # 嵌入的信息
 
     filepath = os.path.join(UPLOAD_FOLDER, filename)
-    code, filename = if_can_be_process(filepath, info, True, filename)
+    code, filename = if_can_be_process(filepath, info, True, filename, True)
 
     if code == 0:
         return {
@@ -70,7 +70,7 @@ def upload_file():
         }
 
     else:  # 如果是提取信息
-        code, info = come_on(filepath)
+        code, info = come_on(filepath, True)
 
         if code != 0:
             return {
