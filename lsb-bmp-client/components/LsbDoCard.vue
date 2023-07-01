@@ -4,7 +4,7 @@
       <div style="display: flex; flex-direction: column; margin-left: 10px; align-items: center; padding-bottom: 23px">
         <div class="step-title">① 上传你的图片</div>
         <el-upload :action="'http://localhost:5000/editor/upload' + '?type=' + type"
-                   accept="image/jpeg,image/jpg,image/png,image/bmp"
+                   accept=".bmp"
                    :limit="1"
                    drag
                    :on-change="handleLimit"
@@ -24,6 +24,14 @@
         <div v-if="type === 'embed'" style="font-size: 18px; margin-bottom: 15px;">
           <div style="font-weight: bold; color: #2a5ad7; display: inline">可嵌入信息长度：</div>
           {{ embedInfoLen !== '' ? embedInfoLen : '上传嵌入图片后处理' }}
+          <el-tooltip class="item" effect="dark" :content="embedInfoLenConvert" placement="top">
+            <i class="el-icon-info"></i>
+            <div slot="content" class="tooltip-content">
+              <div v-html="embedInfoLenConvert">
+                {{embedInfoLenConvert}}
+              </div>
+            </div>
+          </el-tooltip>
         </div>
         <el-input
           type="textarea"
@@ -80,6 +88,7 @@ export default {
       loading: false,
       uploadDisabled: false,
       embedInfoLen: '',
+      embedInfoLenConvert: '上传嵌入图片后处理',
       textarea: '',
       procPicFilename: '',
     }
@@ -113,6 +122,7 @@ export default {
 
     submitLsbTask() {
       this.loading = true;
+      this.$message.info('信息处理中');
 
       let data = {
         filename: this.procPicFilename,
@@ -147,10 +157,11 @@ export default {
         this.$message.error(response.msg);
         return;
       }
-      
+
       if (this.type === 'embed') {
         this.$message.success("图片上传成功，请完成下一步操作");
-        this.embedInfoLen = response.data.max_lsb_length;
+        this.embedInfoLen = response.data.main_max_lsb_length;
+        this.embedInfoLenConvert = response.data.sub_max_lsb_length.replace(/\n/g, '<br/>');
         this.procPicFilename = response.data.filename;
       } else {
         this.$message.success("LSB隐写信息提取成功");

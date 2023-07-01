@@ -3,6 +3,8 @@ import hashlib
 import math
 import struct
 import sys
+import os
+import time
 import numpy as np
 
 MY_FINAL_KEY = "阮在胜是阮在胜是阮在胜是阮在胜是阮在胜是阮在胜是阮在胜是阮在胜是阮在胜是阮在胜是阮在胜"
@@ -10,10 +12,14 @@ MY_FINAL_KEY = MY_FINAL_KEY.encode('utf-32')
 # python 的 string会比内容多那么几十byte，有大问题
 # 判断出字符串中的最大字符类型1byte 2byte 4byte 从而计算字符串长度
 
-# 6/20更新，计算长度后与压缩进行对比，谁小用谁。返回值修改为1.是否使用压缩2.string的encode方式3.字节流变成的数组
+# 计算长度后与压缩进行对比，谁小用谁。返回值修改为1.是否使用压缩2.string的encode方式3.字节流变成的数组
 # 若使用压缩，返回字节流变成的数字流（0-255）（可以直接用写完的那个方法转成list）
 # 若不适用压缩，返回大数字流（根据utf32/16变化）（重新写一个方法，接收encode方法参数）
 dict_encode_method_and_its_bit_amount = {"utf-32": 32, "utf-16": 16, 'ascii': 8}
+
+now_dir = os.path.realpath(__file__)
+uploads_dir = os.path.dirname(os.path.dirname(now_dir))
+UPLOAD_FOLDER = os.path.join(uploads_dir, 'uploads')
 
 
 def encrypt(array, key):
@@ -132,8 +138,7 @@ def get_lsb(linear_list, width, height, bibi_count):
             for i in range(height):
                 this_line = []
                 for j in range(width):
-                    element = long_linear[z * (
-                                width * height) + i * width + j]  # if z * (width * height) + i * width + j < len(linear_list) else 0
+                    element = long_linear[z * (width * height) + i * width + j]  # if z * (width * height) + i * width + j < len(linear_list) else 0
                     this_line.append(element)
                 this_page.append(this_line)
             lsb_new.append(this_page)
@@ -163,7 +168,7 @@ def come_on(filepath):
         print(header_duple, message_duple)
         encode_method = ''
         if header_duple[2] == header_duple[3] == 0:
-            return "Not Encrypt!"
+            return 1, "没有lsb隐写信息"
         elif header_duple[2] == 0:
             encode_method = 'ascii'
         elif header_duple[3] == 0:
@@ -209,7 +214,7 @@ def come_on(filepath):
             for i in range(math.floor(len(zero_one_list) / 8)):
                 last_number_list.append(list_to_number(zero_one_list[i * 8: i * 8 + 8]))
             final_msg = gzip.decompress(bytes(last_number_list)).decode(encode_method)
-            return final_msg
+            return 0, final_msg
 
         if not is_zip:
             chr_len = dict_encode_method_and_its_bit_amount[encode_method]
@@ -220,12 +225,12 @@ def come_on(filepath):
             print(last_number_list[:50])
             for i in range(len(last_number_list)):
                 final_msg += chr(last_number_list[i])
-            return final_msg
+            return 0, final_msg
 
 
-def if_can_be_process(filepath, embedding_string, is_noise):
+def if_can_be_process(filepath, embedding_string, is_noise, raw_filename):
     is_zip, encode_method, number_array = size_of_string(embedding_string)
-    print(is_zip, number_array, encode_method)
+    # print(is_zip, number_array, encode_method)
     zero_one_list = []
     # 如果是用ascii码加密，直接把数字转为列表（因为上面那个方法只适用于把1B的转为列表）
     if is_zip or encode_method == 'ascii':
@@ -236,12 +241,12 @@ def if_can_be_process(filepath, embedding_string, is_noise):
 
     # 推平，得到一个东西
     zero_one_list = sum(zero_one_list, [])
-    print(zero_one_list[:1000])
+    # print(zero_one_list[:1000])
 
     with open(filepath, 'rb') as f:
         is_bmp = f.read(2) == b'BM'
         if not is_bmp:
-            return "Not a bmp!"
+            return 1, "不是bmp图片格式"
         bmp_size = int.from_bytes(f.read(4)[::-1], 'big')
         bf_reserve1_is0 = int.from_bytes(f.read(2)[::-1], 'big')
         bf_reserve2_is0 = int.from_bytes(f.read(2)[::-1], 'big')
@@ -252,7 +257,7 @@ def if_can_be_process(filepath, embedding_string, is_noise):
         height = int.from_bytes(f.read(4)[::-1], 'big')
         # 超过范围就不让做了
         if width > 512 or height > 512:
-            return "Size too large!"
+            return 2, "图片尺寸超出512*512"
 
         if_bi_planes_is_1 = int.from_bytes(f.read(2)[::-1], 'big') == 1
         if not bf_reserve2_is0 == 0 or not bf_reserve1_is0 == 0 or not if_bi_planes_is_1:
@@ -273,7 +278,7 @@ def if_can_be_process(filepath, embedding_string, is_noise):
             # 判断嵌入超了吗，因为是灰度图所以不用乘三
             most_long_embedding_bytes = height * width if bibi_count == 8 else height * width * 3  # 三色图还得乘三
             if most_long_embedding_bytes < len(zero_one_list):
-                return "Message Too large!"
+                return 3, "嵌入信息过长"
             # print("这是做压缩前的嵌入信息大小", embedding_size)
             # print("这是压缩后的", sys.getsizeof(gzip.compress(embedding_string.encode('utf-8'))))
             #
@@ -297,7 +302,7 @@ def if_can_be_process(filepath, embedding_string, is_noise):
                     color_plate.append(one_in_color_plate)
                     must_be_zero = int.from_bytes(f.read(1)[::-1], 'big')
                     if must_be_zero != 0:
-                        return "Color plate error..."
+                        return 4, "调色盘处理出错"
 
             f.seek(off_bits)
             # 将图片读入
@@ -323,9 +328,9 @@ def if_can_be_process(filepath, embedding_string, is_noise):
 
             # 转换成这个比较习惯
             bytes_list_all = np.array(bytes_list_all)
-            print(bytes_list_all.shape)
+            # print(bytes_list_all.shape)
             new_lsb = np.array(get_lsb(zero_one_list, width=width, height=height, bibi_count=bibi_count))
-            print(new_lsb.shape)
+            # print(new_lsb.shape)
 
             if bibi_count == 8:
                 bytes_list_all[:, :, -1] = new_lsb
@@ -350,8 +355,9 @@ def if_can_be_process(filepath, embedding_string, is_noise):
                             result[i][j][k] = list_to_number(result[i][j][k])
 
             # 开始写
-            final_filename = 'output_{}.bmp'.format(int(time.time()))
-            with open("uploads/" + final_filename, 'wb') as fw:
+            final_filename = '{}_output_{}.bmp'.format(raw_filename.split('.')[0], time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()))
+            final_filepath = os.path.join(UPLOAD_FOLDER, final_filename)
+            with open(final_filepath, 'wb') as fw:
                 # 如果两个都是0说明是没有替换的
                 if encode_method == "ascii":
                     fw.write(struct.pack('<2sI2HI', b'BM', bmp_size, 0, 1, off_bits))
@@ -382,5 +388,5 @@ def if_can_be_process(filepath, embedding_string, is_noise):
                             for k in range(3):
                                 fw.write(struct.pack('<B', result[i][j][k]))
                 fw.write(struct.pack('<I', len(zero_one_list)))
-                return final_filename
+                return 0, final_filename
 
