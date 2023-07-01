@@ -168,19 +168,12 @@ def come_on(filepath, need_encrypt):
         message_duple = struct.unpack('3I2H6I', binary_message)
         print(header_duple, message_duple)
         encode_method = ''
-        if header_duple[2] == header_duple[3] == 0:
-            return 1, "没有lsb隐写信息"
-        elif header_duple[2] == 0:
-            encode_method = 'ascii'
-        elif header_duple[3] == 0:
-            encode_method = 'utf-16'
-        else:
-            encode_method = 'utf-32'
+
 
         bibi_count = message_duple[4]
         width = message_duple[1]
         height = message_duple[2]
-        is_zip = True if message_duple[3] == 1 else False
+
         f.seek(header_duple[-1])
 
         bytes_list_all = []
@@ -202,6 +195,17 @@ def come_on(filepath, need_encrypt):
                     this_line_bytes.append(this_pixel)
             bytes_list_all.append(this_line_bytes)
         zero_one_len = struct.unpack('<I', f.read(4))[0]
+        enen = struct.unpack('<H', f.read(2))[0]
+        if enen == 0:
+            encode_method = 'ascii'
+        elif enen == 1:
+            encode_method = 'utf-16'
+        else:
+            encode_method = 'utf-32'
+        wuwu = struct.unpack('<H', f.read(2))[0]
+        is_zip = True if wuwu == 1 else False
+
+
 
         # 转换成这个比较习惯
         bytes_list_all = np.array(bytes_list_all)
@@ -363,23 +367,27 @@ def if_can_be_process(filepath, embedding_string, is_noise, raw_filename, need_e
             final_filename = '{}_output_{}.bmp'.format(raw_filename.split('.')[0], time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()))
             final_filepath = os.path.join(UPLOAD_FOLDER, final_filename)
             with open(final_filepath, 'wb') as fw:
+                fw.write(struct.pack('<2sI2HI', b'BM', bmp_size, 0, 0, off_bits))
                 # 如果两个都是0说明是没有替换的
-                if encode_method == "ascii":
-                    fw.write(struct.pack('<2sI2HI', b'BM', bmp_size, 0, 1, off_bits))
-                elif encode_method == "utf-16":
-                    fw.write(struct.pack('<2sI2HI', b'BM', bmp_size, 1, 0, off_bits))
-                else:
-                    fw.write(struct.pack('<2sI2HI', b'BM', bmp_size, 1, 1, off_bits))
+                # if encode_method == "ascii":
+                #     fw.write(struct.pack('<2sI2HI', b'BM', bmp_size, 0, 1, off_bits))
+                # elif encode_method == "utf-16":
+                #     fw.write(struct.pack('<2sI2HI', b'BM', bmp_size, 1, 0, off_bits))
+                # else:
+                #     fw.write(struct.pack('<2sI2HI', b'BM', bmp_size, 1, 1, off_bits))
 
                 # 这个判断是否压缩
-                if is_zip:
-                    fw.write(struct.pack('<3I2H6I', this_structure_size, width, height, 1, bibi_count, bi_compression,
-                                         bi_size_image,
-                                         bi_X_per, bi_Y_per, bi_color_used, bi_coloer_important))
-                else:
-                    fw.write(struct.pack('<3I2H6I', this_structure_size, width, height, 0, bibi_count, bi_compression,
-                                         bi_size_image,
-                                         bi_X_per, bi_Y_per, bi_color_used, bi_coloer_important))
+                fw.write(struct.pack('<3I2H6I', this_structure_size, width, height, 1, bibi_count, bi_compression,
+                                     bi_size_image,
+                                     bi_X_per, bi_Y_per, bi_color_used, bi_coloer_important))
+                # if is_zip:
+                #     fw.write(struct.pack('<3I2H6I', this_structure_size, width, height, 1, bibi_count, bi_compression,
+                #                          bi_size_image,
+                #                          bi_X_per, bi_Y_per, bi_color_used, bi_coloer_important))
+                # else:
+                #     fw.write(struct.pack('<3I2H6I', this_structure_size, width, height, 0, bibi_count, bi_compression,
+                #                          bi_size_image,
+                #                          bi_X_per, bi_Y_per, bi_color_used, bi_coloer_important))
                 if bibi_count == 8:
                     for i in range(256):
                         fw.write(struct.pack('<4B', color_plate[i][0], color_plate[i][1],
@@ -393,5 +401,15 @@ def if_can_be_process(filepath, embedding_string, is_noise, raw_filename, need_e
                             for k in range(3):
                                 fw.write(struct.pack('<B', result[i][j][k]))
                 fw.write(struct.pack('<I', len(zero_one_list)))
+                if encode_method == "ascii":
+                    fw.write(struct.pack('<H', 0))
+                elif encode_method == "utf-16":
+                    fw.write(struct.pack('<H', 1))
+                else:
+                    fw.write(struct.pack('<H', 2))
+                if is_zip:
+                    fw.write(struct.pack('<H', 1))
+                else:
+                    fw.write(struct.pack('<H', 0))
                 return 0, final_filename
 

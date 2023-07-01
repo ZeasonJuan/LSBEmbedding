@@ -6,7 +6,7 @@ import csv
 import pandas as pd
 import numpy as np
 from PIL import Image
-from util.lsb import *
+from lsb import *
 import os
 
 now_dir = os.path.realpath(__file__)
