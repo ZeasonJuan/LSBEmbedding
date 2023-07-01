@@ -10,6 +10,7 @@ MY_FINAL_KEY = MY_FINAL_KEY.encode('utf-32')
 #python 的 string会比内容多那么几十byte，有大问题
 #判断出字符串中的最大字符类型1byte 2byte 4byte 从而计算字符串长度
 
+
 #6/20更新，计算长度后与压缩进行对比，谁小用谁。返回值修改为1.是否使用压缩2.string的encode方式3.字节流变成的数组
 #若使用压缩，返回字节流变成的数字流（0-255）（可以直接用写完的那个方法转成list）
 #若不适用压缩，返回大数字流（根据utf32/16变化）（重新写一个方法，接收encode方法参数）
@@ -373,4 +374,3 @@ def if_can_be_process(filepath, embedding_string, is_noise):
 # if_can_be_process("../data/可供选用的图片/可供选用的图片/24位真彩图/test1.bmp", '仍然倚在失眠夜，望天边星宿。仍然听见小提琴，如泣似诉再挑逗。为何只剩一弯月，留在'
 #                                                                              '我的天空。这晚以后，音sssssssssssssssssssssssssssssssss讯隔绝。😀', True)
 
-come_on('output.bmp')

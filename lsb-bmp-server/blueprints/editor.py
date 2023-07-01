@@ -19,6 +19,11 @@ MY_FINAL_KEY = MY_FINAL_KEY.encode('utf-32')
 #若使用压缩，返回字节流变成的数字流（0-255）（可以直接用写完的那个方法转成list）
 #若不适用压缩，返回大数字流（根据utf32/16变化）（重新写一个方法，接收encode方法参数）
 dict_encode_method_and_its_bit_amount = {"utf-32": 32, "utf-16": 16, 'ascii': 8}
+def is_bmp(filepath):
+    with open(filepath, 'rb') as f:
+        header = f.read(14)
+        header_duple = struct.unpack('<2sI2HI', header)
+        return header_duple[0] == b'BM'
 def encrypt(array, key):
     seed = int.from_bytes(hashlib.sha256(key).digest(), 'big')
     random_machine = np.random.default_rng(seed)
@@ -410,7 +415,6 @@ def submit_article():
         }
     }
 
-
 @bp.route('/upload', methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
@@ -428,7 +432,9 @@ def upload_file():
         os.makedirs(UPLOAD_FOLDER)
     filepath = os.path.join(UPLOAD_FOLDER, filename)
     file.save(filepath)
-    print(type)
+    if not is_bmp(filepath):
+        return "Not a bmp!"
+
     if type == 'embed':  # TODO 如果是嵌入图片 只处理一下可嵌入的信息长度就可以
         max_bits = get_max(filepath)
         max_lsb_length = "{}个字符 for ASCII 字符串 \n{}个字符 for utf-16编码字符串（汉字）\n{}个字符 for utf-32编码字符串（稀有字符，如emoji）\n总共{}位".format(math.floor(max_bits / 8), math.floor(max_bits / 16), math.floor(max_bits / 32), max_bits)

@@ -56,5 +56,6 @@
 #     image_urls = extract_image_urls(url)
 #     for img_url in image_urls:
 #         print(img_url)
+
 a = [3, 5, 7, 2]
 print([0] * 6)
